@@ -19,7 +19,7 @@ symbol = st.sidebar.text_input("Enter a stock symbol", "MSFT")
 # fetch the stock price data
 data = yf.download(symbol, start="2020-01-01", end="2022-12-31")
 
-# create 3 columns
+# create 2 columns
 col1, col2 = st.columns(2)
 
 # plot the stock price performance in the first column
