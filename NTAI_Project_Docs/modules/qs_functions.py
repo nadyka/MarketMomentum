@@ -6,6 +6,9 @@ import streamlit as st
 from scipy.stats import norm
 import pandas as pd
 import time
+from st_aggrid import AgGrid
+
+############GRAPHS################
 
 def plot_daily_returns(stock, spy_data=None):
     """
@@ -367,8 +370,11 @@ def plot_returns(stock):
 
     fig = go.Figure()
 
-    # Add the monthly returns plot for the stock
     fig.add_trace(go.Scatter(x=stock_monthly.index, y=stock_monthly, mode='lines', name='Monthly Returns'))
+
+    # Add title to the graph
+    fig.update_layout(title_text='Monthly Returns')
+
     return fig
 
 def plot_rolling_sharpe(stock):
@@ -476,3 +482,222 @@ def plot_yearly_returns(stock):
         )
     )
     return fig
+
+######TABLES######
+
+def table_daily_returns(stock, spy_data=None):
+    """
+    Prepares daily returns for a given stock and optionally compares it with SPY data for AgGrid table.
+
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    - spy_data: A pandas DataFrame containing the daily returns for SPY (optional).
+    """
+    
+    # Convert the stock data to a DataFrame and reset the index
+    df = pd.DataFrame(stock).reset_index()
+
+    # Rename the columns
+    df.columns = ['Date', 'Daily Returns']
+    # Format the 'Date' column to 'mm/dd/yyyy'
+    df['Date'] = df['Date'].dt.strftime('%m/%d/%Y')
+
+    # Round 'Daily Returns' to 2 decimal places
+    df['Daily Returns'] = df['Daily Returns'].round(2)
+
+    # If spy_data is provided, add it to the DataFrame and round it
+    if spy_data is not None:
+        df['SPY'] = spy_data.round(2)
+
+    return df
+
+def table_drawdown(stock):
+    """
+    Displays the drawdown of returns for a given stock as an AgGrid table.
+
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    """
+    
+    # Drop NaN values
+    stock = stock.dropna()
+
+    # Convert returns data into prices
+    prices = (1 + stock).cumprod()
+
+    # Calculate drawdown series
+    drawdown_series = prices / np.maximum.accumulate(prices) - 1.0
+    drawdown_series = drawdown_series.replace([np.inf, -np.inf, -0], 0)
+    drawdown_series = drawdown_series.rename('drawdown')
+
+    # Mark periods with no drawdown
+    no_dd = drawdown_series == 0
+
+    # Convert no_dd to boolean type
+    no_dd = no_dd.astype(bool)
+
+    # Determine start and end dates of drawdown periods
+    starts = (~no_dd & no_dd.shift(1).fillna(False)).where(lambda x: x).dropna().index
+    ends = (no_dd & ~no_dd.shift(1).fillna(False)).where(lambda x: x).shift(-1, fill_value=False).dropna().index
+    # Handle case where series begins or ends with a drawdown
+    if starts[0] > ends[0]:
+        starts = starts.insert(0, drawdown_series.index[0])
+    if starts[-1] > ends[-1]:
+        ends = ends.append(pd.Index([drawdown_series.index[-1]]))
+
+    # Calculate drawdown details for each period
+    data = []
+    for start, end in zip(starts, ends):
+        dd = drawdown_series[start:end]
+        data.append({
+            'start date': start.strftime('%m/%d/%Y'),
+            'end date': end.strftime('%m/%d/%Y'),
+            'valley date': dd.idxmin().strftime('%m/%d/%Y'),
+            'Days': (end - start).days + 1,
+            'drawdown %': round(dd.min() * 100, 2),  # round to 2 decimal places
+            '99% max drawdown %': round(dd[dd > dd.quantile(0.01)].min() * 100, 2)  # round to 2 decimal places
+        })
+
+    # Create DataFrame from results
+    df = pd.DataFrame(data)
+
+    # Get the 5 worst drawdown periods
+    df = df.nsmallest(5, 'drawdown %')
+
+    return df
+
+def table_drawdowns_periods(stock):
+    # Drop NaN values
+    stock = stock.dropna()
+
+    # Convert returns data into prices
+    prices = (1 + stock).cumprod()
+
+    # Calculate drawdown series
+    drawdown_series = prices / np.maximum.accumulate(prices) - 1.0
+    drawdown_series = drawdown_series.replace([np.inf, -np.inf, -0], 0)
+    drawdown_series = drawdown_series.rename('drawdown')
+
+        # Mark periods with no drawdown
+    no_dd = drawdown_series == 0
+
+    # Convert no_dd to boolean type
+    no_dd = no_dd.astype(bool)
+
+    # Determine start and end dates of drawdown periods
+    starts = (~no_dd & no_dd.shift(1).fillna(False)).where(lambda x: x).dropna().index
+    ends = (no_dd & ~no_dd.shift(1).fillna(False)).where(lambda x: x).shift(-1, fill_value=False).dropna().index
+    # Handle case where series begins or ends with a drawdown
+    if starts[0] > ends[0]:
+        starts = starts.insert(0, drawdown_series.index[0])
+    if starts[-1] > ends[-1]:
+        ends = ends.append(pd.Index([drawdown_series.index[-1]]))
+
+        # Calculate drawdown details for each period
+    data = []
+    for start, end in zip(starts, ends):
+        dd = drawdown_series[start:end]
+        data.append({
+            'start date': start.strftime('%m/%d/%Y'),
+            'end date': end.strftime('%m/%d/%Y'),
+            'valley date': dd.idxmin().strftime('%m/%d/%Y'),
+            'Days': (end - start).days + 1,
+            'drawdown %': round(dd.min() * 100, 2),  # round to 2 decimal places
+            '99% max drawdown %': round(dd[dd > dd.quantile(0.01)].min() * 100, 2)  # round to 2 decimal places
+        })
+
+    # Create DataFrame from results
+    df = pd.DataFrame(data)
+
+    # Get the 10 worst drawdown periods
+    df = df.nsmallest(10, 'drawdown %')
+
+
+    return df
+    
+
+
+def table_earnings(stock):
+    # Convert returns to growth of $1 investment over time
+    earnings_data = (1 + stock).cumprod()
+
+    # Convert the series to a DataFrame and reset the index to get 'Date' as a column
+    earnings_df = earnings_data.reset_index()
+    earnings_df.columns = ['Date', 'Value of $1']
+
+    # Format 'Date' to mm/dd/yyyy and remove time
+    earnings_df['Date'] = earnings_df['Date'].dt.strftime('%m/%d/%Y')
+
+    # Round 'Value of $1' to 2 decimal places
+    earnings_df['Value of $1'] = earnings_df['Value of $1'].round(2)
+
+    # Display the earnings as an ag-Grid table
+
+    return earnings_df
+
+
+def table_returns(stock):
+    stock_monthly = stock.resample('M').apply(lambda x: (1 + x).prod() - 1)
+    stock_monthly_df = stock_monthly.reset_index()
+    stock_monthly_df.columns = ['Date', 'Monthly Returns']
+
+    # Round the returns to 2 decimal places
+    stock_monthly_df['Monthly Returns'] = stock_monthly_df['Monthly Returns'].round(2)
+
+    # Format the date to mm/dd/yyyy without any time
+    stock_monthly_df['Date'] = stock_monthly_df['Date'].dt.strftime('%m/%d/%Y')
+
+    return stock_monthly_df
+
+def table_rolling_sharpe(stock):
+    rolling_sharpe = qs.stats.rolling_sharpe(stock)
+    rolling_sharpe.dropna(inplace=True)
+    rolling_sharpe_df = rolling_sharpe.reset_index()
+    rolling_sharpe_df.columns = ['Date', 'Rolling Sharpe Ratio']
+
+    # Round the returns to 2 decimal places
+    rolling_sharpe_df['Rolling Sharpe Ratio'] = rolling_sharpe_df['Rolling Sharpe Ratio'].round(2)
+
+    # Format the date to mm/dd/yyyy without any time
+    rolling_sharpe_df['Date'] = rolling_sharpe_df['Date'].dt.strftime('%m/%d/%Y')
+
+    return rolling_sharpe_df
+
+def table_rolling_sortino(stock):
+    rolling_sortino = qs.stats.rolling_sortino(stock)
+    rolling_sortino.dropna(inplace=True)
+    rolling_sortino_df = rolling_sortino.reset_index()
+    rolling_sortino_df.columns = ['Date', 'Rolling Sortino Ratio']
+
+    # Round the ratio to 2 decimal places
+    rolling_sortino_df['Rolling Sortino Ratio'] = rolling_sortino_df['Rolling Sortino Ratio'].round(2)
+
+    # Format the date to mm/dd/yyyy without any time
+    rolling_sortino_df['Date'] = rolling_sortino_df['Date'].dt.strftime('%m/%d/%Y')
+    return rolling_sortino_df
+
+def table_rolling_volatility(stock):
+    rolling_volatility = qs.stats.rolling_volatility(stock)
+    rolling_volatility.dropna(inplace=True)
+    rolling_volatility_df = rolling_volatility.reset_index()
+    rolling_volatility_df.columns = ['Date', 'Rolling Volatility']
+
+    # Round the volatility to 2 decimal places
+    rolling_volatility_df['Rolling Volatility'] = rolling_volatility_df['Rolling Volatility'].round(2)
+
+    # Format the date to mm/dd/yyyy without any time
+    rolling_volatility_df['Date'] = rolling_volatility_df['Date'].dt.strftime('%m/%d/%Y')
+    return rolling_volatility_df
+
+def table_yearly_returns(stock):
+    stock_yearly = stock.resample('Y').apply(lambda x: (1 + x).prod() - 1)
+    stock_yearly_df = stock_yearly.reset_index()
+    stock_yearly_df.columns = ['Date', 'Yearly Returns']
+
+    # Round the returns to 2 decimal places
+    stock_yearly_df['Yearly Returns'] = stock_yearly_df['Yearly Returns'].round(2)
+
+    # Extract the year from the date
+    stock_yearly_df['Date'] = stock_yearly_df['Date'].dt.year
+
+    return stock_yearly_df
