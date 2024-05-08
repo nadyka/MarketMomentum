@@ -1,22 +1,35 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import quantstats as qs
 import plotly.graph_objects as go
-import streamlit as st
 from scipy.stats import norm
 import pandas as pd
-import time
-from st_aggrid import AgGrid
+
+def max_consecutive(returns, win=True):
+    # Convert returns to binary win/loss
+    binary = returns > 0 if win else returns < 0
+
+    # Find where the streaks of wins/losses start
+    streak_starts = (~binary).shift(-1).fillna(False) & binary
+
+    # Find where the streaks of wins/losses end
+    streak_ends = binary.shift(-1).fillna(False) & (~binary)
+
+    # Calculate the length of each streak
+    streak_lengths = (streak_ends.cumsum() - streak_starts.cumsum()).max()
+
+    return streak_lengths
+
 
 ############GRAPHS################
 
-def plot_daily_returns(stock, spy_data=None):
+def plot_daily_returns(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     """
-    Plots daily returns for a given stock and optionally compares it with SPY data.
+    Plots daily returns for a given stock and optionally compares it with a benchmark data.
 
     Parameters:
     - stock: A pandas DataFrame containing the daily returns for the stock.
-    - spy_data: A pandas DataFrame containing the daily returns for SPY (optional).
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
+    - benchmark_symbol: A string representing the ticker symbol of the benchmark (default is 'SPY').
 
     Returns:
     - A Plotly figure displaying the daily returns.
@@ -25,65 +38,77 @@ def plot_daily_returns(stock, spy_data=None):
     fig = go.Figure()
 
     # Add the daily returns plot for the stock
-    fig.add_trace(go.Scatter(x=stock.index, y=stock, mode='lines', name='Daily Returns'))
+    fig.add_trace(go.Scatter(x=stock.index, y=stock, mode='lines', name=symbol, line=dict(color='blue')))
 
-    # Add the SPY data plot if spy_data is provided
-    if spy_data is not None:
-        fig.add_trace(go.Scatter(x=spy_data.index, y=spy_data, mode='lines', name='SPY', line=dict(color='black')))
+    # Add the benchmark data plot if benchmark is provided
+    if benchmark is not None:
+        fig.add_trace(go.Scatter(x=benchmark.index, y=benchmark, mode='lines', name=benchmark_symbol, line=dict(color='red')))
 
     # Customize the layout
     fig.update_layout(title='Daily Returns', xaxis_title='Date', yaxis_title='Returns')
 
     return fig
 
-def plot_distribution(stock):
-    
+def plot_distribution(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     # Convert returns to percentages
     stock_percentage = stock * 100
+    benchmark_percentage = None
+
+    if benchmark is not None:
+        benchmark_percentage = benchmark * 100
 
     # Calculate the average
-    average = np.mean(stock_percentage)
+    stock_average = np.mean(stock_percentage)
+    benchmark_average = None
 
-    fig = go.Figure(data=go.Histogram(x=stock_percentage, nbinsx=50, histnorm='probability density', name='Daily Returns'))
+    if benchmark is not None:
+        benchmark_average = np.mean(benchmark_percentage)
 
+    fig = go.Figure(data=go.Histogram(x=stock_percentage, nbinsx=50, histnorm='probability density', name=f'{symbol} Daily Returns'))
+
+    # Add a histogram for the benchmark if provided
+    if benchmark is not None:
+        fig.add_trace(go.Histogram(x=benchmark_percentage, nbinsx=50, histnorm='probability density', name=f'{benchmark_symbol} Daily Returns'))
 
     # Add a vertical line at the average
     fig.add_shape(
         type="line",
-        x0=average, y0=0, x1=average, y1=1,  # y1 is set to 1 to make the line span the entire y-axis
-        line=dict(color="Red",width=2, dash="dot"),  # dash="dot" makes the line dotted
-        yref="paper"  # This makes the y-coordinates be interpreted as a fraction of the plot's height
-    )
-    # Add a label for the line
-    fig.add_annotation(
-        x=average, y=0.5,
-        text="Average",
-        showarrow=True,
-        arrowhead=1,
-        ax=-50,
-        ay=-100,
+        x0=stock_average, y0=0, x1=stock_average, y1=1,
+        line=dict(color="Red",width=2, dash="dot"),
         yref="paper"
     )
+
+    # Add a vertical line at the benchmark average if provided
+    if benchmark is not None:
+        fig.add_shape(
+            type="line",
+            x0=benchmark_average, y0=0, x1=benchmark_average, y1=1,
+            line=dict(color="Blue",width=2, dash="dot"),
+            yref="paper"
+        )
+
     # Update layout
     fig.update_layout(
         title='Daily Returns Distribution',
         xaxis_title='Returns (%)',
-        xaxis=dict(
-            tickmode='array',
-            tickvals=list(range(int(stock_percentage.min()), int(stock_percentage.max())+10, 10)),
-            ticktext=[f'{i}%' for i in range(int(stock_percentage.min()), int(stock_percentage.max())+10, 10)],
-            range=[min(0, stock_percentage.min()), stock_percentage.max()],
-        ),
         yaxis_title='Density',
-        bargap=0.1 # gap between bars of adjacent location coordinates
+        bargap=0.1,
+        barmode='overlay'
     )
+    fig.update_traces(opacity=0.75)
 
     # Calculate the KDE
     x = np.linspace(stock_percentage.min(), stock_percentage.max(), 100)
-    pdf = norm.pdf(x, average, stock_percentage.std())
+    stock_pdf = norm.pdf(x, stock_average, stock_percentage.std())
 
     # Add the KDE line to the figure
-    fig.add_trace(go.Scatter(x=x, y=pdf, mode='lines', name='Distribution'))
+    fig.add_trace(go.Scatter(x=x, y=stock_pdf, mode='lines', name=f'{symbol} Distribution'))
+
+    # Calculate and add the benchmark KDE if provided
+    if benchmark is not None:
+        benchmark_pdf = norm.pdf(x, benchmark_average, benchmark_percentage.std())
+        fig.add_trace(go.Scatter(x=x, y=benchmark_pdf, mode='lines', name=f'{benchmark_symbol} Distribution'))
+
     return fig
 
 def plot_drawdown(stock):
@@ -210,8 +235,7 @@ def plot_drawdowns_periods(stock):
     fig.update_layout(title='Earnings with Worst Drawdown Periods', xaxis_title='Date', yaxis_title='Cumulative Returns')
     return fig
 
-def plot_earnings(stock):
-    
+def plot_earnings(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     """
     Plots the earnings of returns for a given stock.
     Note: This function assumes 'stock' contains earnings data.
@@ -219,7 +243,14 @@ def plot_earnings(stock):
     # Convert returns to growth of $1 investment over time
     earnings_data = (1 + stock).cumprod()
     # Plot the earnings
-    fig = go.Figure(data=go.Scatter(x=earnings_data.index, y=earnings_data, mode='lines'))
+    fig = go.Figure(data=go.Scatter(x=earnings_data.index, y=earnings_data, mode='lines', name=symbol))
+
+    # If a benchmark is provided, plot it as well
+    if benchmark is not None:
+        
+        benchmark_data = (1 + benchmark).cumprod()
+        fig.add_trace(go.Scatter(x=benchmark_data.index, y=benchmark_data, mode='lines', name=benchmark_symbol, line=dict(color='red')))
+
     fig.update_layout(title='Earnings', xaxis_title='Date', yaxis_title='Value of $1')
     return fig
 
@@ -276,19 +307,35 @@ def plot_monthly_dist(stock):
     fig.add_trace(go.Scatter(x=x, y=pdf, mode='lines', name='Distribution'))
     return fig
 
-def plot_log_returns(stock):
+def plot_log_returns(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     """
-    Plots the log returns of a given stock.
+    Plots the log returns of a given stock and optionally compares it with a benchmark data.
+
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
+    - benchmark_symbol: A string representing the ticker symbol of the benchmark (default is 'SPY').
+
+    Returns:
+    - A Plotly figure displaying the daily returns.
     """
-    returns_data = stock
+    
     # Calculate cumulative returns
-    cumulative_returns = (1 + returns_data).cumprod() *100
+    stock_cumulative_returns = (1 + stock).cumprod() * 100
+    benchmark_cumulative_returns = None
+
+    if benchmark is not None:
+        benchmark_cumulative_returns = (1 + benchmark).cumprod() * 100
 
     # Create a Plotly figure
     fig = go.Figure()
 
     # Add a scatter trace for the cumulative returns data
-    fig.add_trace(go.Scatter(x=cumulative_returns.index, y=cumulative_returns, mode='lines', name='Cumulative Returns '))
+    fig.add_trace(go.Scatter(x=stock_cumulative_returns.index, y=stock_cumulative_returns, mode='lines', name=symbol, line=dict(color='blue')))
+
+    # Add a scatter trace for the benchmark cumulative returns data if provided
+    if benchmark is not None:
+        fig.add_trace(go.Scatter(x=benchmark_cumulative_returns.index, y=benchmark_cumulative_returns, mode='lines', name=benchmark_symbol, line=dict(color='red')))
 
     # Set the title and axis labels
     fig.update_layout(title='Cumulative Returns (Log Scaled)', xaxis_title='Date', yaxis_title='Cumulative Returns')
@@ -296,6 +343,7 @@ def plot_log_returns(stock):
     # Set the y-axis to a logarithmic scale, specify tick values and text, and ensure the negative part is always visible
     fig.update_yaxes(type='log', tickvals=[-1000000, -100000, -10000, -1000, -100, 0, 100, 1000, 10000, 100000, 1000000], 
                     ticktext=['-1 mil%', '-100k%', '-10k%', '-1k%', '-100%', '0', '100%', '1k%', '10k%', '100k%', '1 mil%'])
+
     return fig
 
 def plot_monthly_heatmap(stock):
@@ -365,112 +413,175 @@ def plot_monthly_heatmap(stock):
 
     return fig
 
-def plot_returns(stock):
-    stock_monthly = stock.resample('M').apply(lambda x: (1 + x).prod() - 1)
+def plot_returns(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
+    """
+    Plots monthly returns for a given stock and optionally compares it with a benchmark data.
 
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
+    - benchmark_symbol: A string representing the ticker symbol of the benchmark (default is 'SPY').
+
+    Returns:
+    - A Plotly figure displaying the monthly returns.
+    """
+    
+    # Calculate monthly returns
+    stock_monthly = stock.resample('M').apply(lambda x: (1 + x).prod() - 1)
+    benchmark_monthly = None
+
+    if benchmark is not None:
+        benchmark_monthly = benchmark.resample('M').apply(lambda x: (1 + x).prod() - 1)
+
+    # Create a Plotly figure
     fig = go.Figure()
 
-    fig.add_trace(go.Scatter(x=stock_monthly.index, y=stock_monthly, mode='lines', name='Monthly Returns'))
+    # Add a scatter trace for the monthly returns data
+    fig.add_trace(go.Scatter(x=stock_monthly.index, y=stock_monthly, mode='lines', name=symbol, line=dict(color='blue')))
+
+    # Add a scatter trace for the benchmark monthly returns data if provided
+    if benchmark is not None:
+        fig.add_trace(go.Scatter(x=benchmark_monthly.index, y=benchmark_monthly, mode='lines', name=benchmark_symbol, line=dict(color='red')))
 
     # Add title to the graph
     fig.update_layout(title_text='Monthly Returns')
 
     return fig
 
-def plot_rolling_sharpe(stock):
+def plot_rolling_sharpe(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     """
-    Plots the rolling Sharpe ratio of a given stock.
+    Plots the rolling Sharpe ratio of a given stock and optionally compares it with a benchmark data.
+
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
+    - benchmark_symbol: A string representing the ticker symbol of the benchmark (default is 'SPY').
+
+    Returns:
+    - A Plotly figure displaying the rolling Sharpe ratio.
     """
+    
+    # Calculate rolling Sharpe ratio
     rolling_sharpe = qs.stats.rolling_sharpe(stock)
+    benchmark_rolling_sharpe = None
 
-    # Calculate the average of the Sharpe ratio
-    average_sharpe = rolling_sharpe.mean()
+    if benchmark is not None:
+        benchmark_rolling_sharpe = qs.stats.rolling_sharpe(benchmark)
 
-    fig = go.Figure(data=go.Scatter(x=rolling_sharpe.index, y=rolling_sharpe, mode='lines'))
-    # Add a red dotted line at the average
-    fig.add_shape(
-        type='line',
-        x0=rolling_sharpe.index[0],
-        x1=rolling_sharpe.index[-1],
-        y0=average_sharpe,
-        y1=average_sharpe,
-        line=dict(color='Red', dash='dot')
-    )
-    fig.update_layout(title='Rolling Sharpe Ratio', xaxis_title='Date', yaxis_title='Sharpe Ratio')
+    # Create a Plotly figure
+    fig = go.Figure()
+
+    # Add a scatter trace for the rolling Sharpe ratio data
+    fig.add_trace(go.Scatter(x=rolling_sharpe.index, y=rolling_sharpe, mode='lines', name=symbol, line=dict(color='blue')))
+
+    # Add a scatter trace for the benchmark rolling Sharpe ratio data if provided
+    if benchmark is not None:
+        fig.add_trace(go.Scatter(x=benchmark_rolling_sharpe.index, y=benchmark_rolling_sharpe, mode='lines', name=benchmark_symbol, line=dict(color='red')))
+
+    # Add title to the graph
+    fig.update_layout(title_text='Rolling Sharpe Ratio')
+
     return fig
 
-def plot_rolling_sortino(stock):
+def plot_rolling_sortino(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     """
-    Plots the rolling Sortino ratio of a given stock.
-    """
-    returns_data = stock
-    qs_daily_returns = qs.plots.rolling_sortino(returns_data)
+    Plots the rolling Sortino ratio of a given stock and optionally compares it with a benchmark data.
 
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
+    - benchmark_symbol: A string representing the ticker symbol of the benchmark (default is 'SPY').
+
+    Returns:
+    - A Plotly figure displaying the rolling Sortino ratio.
+    """
+    
+    # Calculate rolling Sortino ratio
     rolling_sortino = qs.stats.rolling_sortino(stock)
+    benchmark_rolling_sortino = None
 
-    # Calculate the average of the Sharpe ratio
-    average_sortino = rolling_sortino.mean()
+    if benchmark is not None:
+        benchmark_rolling_sortino = qs.stats.rolling_sortino(benchmark)
 
-    fig = go.Figure(data=go.Scatter(x=rolling_sortino.index, y=rolling_sortino, mode='lines'))
-    # Add a red dotted line at the average
-    fig.add_shape(
-        type='line',
-        x0=rolling_sortino.index[0],
-        x1=rolling_sortino.index[-1],
-        y0=average_sortino,
-        y1=average_sortino,
-        line=dict(color='Red', dash='dot')
-    )
-    fig.update_layout(title='Rolling Sortino Ratio', xaxis_title='Date', yaxis_title='Sortino Ratio')
+    # Create a Plotly figure
+    fig = go.Figure()
+
+    # Add a scatter trace for the rolling Sortino ratio data
+    fig.add_trace(go.Scatter(x=rolling_sortino.index, y=rolling_sortino, mode='lines', name=symbol, line=dict(color='blue')))
+
+    # Add a scatter trace for the benchmark rolling Sortino ratio data if provided
+    if benchmark is not None:
+        fig.add_trace(go.Scatter(x=benchmark_rolling_sortino.index, y=benchmark_rolling_sortino, mode='lines', name=benchmark_symbol, line=dict(color='red')))
+
+    # Add title to the graph
+    fig.update_layout(title_text='Rolling Sortino Ratio')
 
     return fig
 
-def plot_rolling_volatility(stock):
+def plot_rolling_volatility(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     """
-    Plots the rolling volatility of a given stock.
+    Plots the rolling volatility of a given stock and optionally compares it with a benchmark data.
+
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
+    - benchmark_symbol: A string representing the ticker symbol of the benchmark (default is 'SPY').
+
+    Returns:
+    - A Plotly figure displaying the rolling volatility.
     """
+    
+    # Calculate rolling volatility
     rolling_volatility = qs.stats.rolling_volatility(stock)
+    benchmark_rolling_volatility = None
 
-    # Calculate the average of the Sharpe ratio
-    average_volatility = rolling_volatility.mean()
+    if benchmark is not None:
+        benchmark_rolling_volatility = qs.stats.rolling_volatility(benchmark)
 
-    fig = go.Figure(data=go.Scatter(x=rolling_volatility.index, y=rolling_volatility, mode='lines'))
-    # Add a red dotted line at the average
-    fig.add_shape(
-        type='line',
-        x0=rolling_volatility.index[0],
-        x1=rolling_volatility.index[-1],
-        y0=average_volatility,
-        y1=average_volatility,
-        line=dict(color='Red', dash='dot')
-    )
-    fig.update_layout(title='Rolling Volatility', xaxis_title='Date', yaxis_title='Volatility')
+    # Create a Plotly figure
+    fig = go.Figure()
+
+    # Add a scatter trace for the rolling volatility data
+    fig.add_trace(go.Scatter(x=rolling_volatility.index, y=rolling_volatility, mode='lines', name=symbol, line=dict(color='blue')))
+
+    # Add a scatter trace for the benchmark rolling volatility data if provided
+    if benchmark is not None:
+        fig.add_trace(go.Scatter(x=benchmark_rolling_volatility.index, y=benchmark_rolling_volatility, mode='lines', name=benchmark_symbol, line=dict(color='red')))
+
+    # Add title to the graph
+    fig.update_layout(title_text='Rolling Volatility')
+
     return fig
 
-def plot_yearly_returns(stock):
+def plot_yearly_returns(stock, symbol, benchmark=None, benchmark_symbol='Benchmark'):
     """
-    Plots the yearly returns of a given stock.
+    Plots the yearly returns of a given stock and optionally compares it with a benchmark data.
+
+    Parameters:
+    - stock: A pandas DataFrame containing the daily returns for the stock.
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
+    - benchmark_symbol: A string representing the ticker symbol of the benchmark (default is 'SPY').
+
+    Returns:
+    - A Plotly figure displaying the yearly returns.
     """
+    
     # Convert daily returns to yearly returns
     stock_yearly = stock.resample('Y').apply(lambda x: (1 + x).prod() - 1)
+    benchmark_yearly = None
 
-    # Calculate the average of the yearly returns
-    average_yearly_return = stock_yearly.mean()
+    if benchmark is not None:
+        benchmark_yearly = benchmark.resample('Y').apply(lambda x: (1 + x).prod() - 1)
 
+    # Create a Plotly figure
     fig = go.Figure()
 
     # Add the yearly returns plot for the stock as a bar graph
-    fig.add_trace(go.Bar(x=stock_yearly.index, y=stock_yearly, name='EOY Returns'))
+    fig.add_trace(go.Bar(x=stock_yearly.index, y=stock_yearly, name=symbol))
 
-    # Add a red dotted line at the average
-    fig.add_shape(
-        type='line',
-        x0=stock_yearly.index[0],
-        x1=stock_yearly.index[-1],
-        y0=average_yearly_return,
-        y1=average_yearly_return,
-        line=dict(color='Red', dash='dot')
-    )
+    # Add the yearly returns plot for the benchmark as a bar graph if provided
+    if benchmark is not None:
+        fig.add_trace(go.Bar(x=benchmark_yearly.index, y=benchmark_yearly, name=benchmark_symbol))
 
     # Update layout to show y-axis as percentage
     fig.update_layout(
@@ -484,30 +595,35 @@ def plot_yearly_returns(stock):
     return fig
 
 ######TABLES######
-
-def table_daily_returns(stock, spy_data=None):
+def table_daily_returns(stock, symbol, benchmark_symbol=None, benchmark=None):
     """
-    Prepares daily returns for a given stock and optionally compares it with SPY data for AgGrid table.
+    Prepares daily returns for a given stock and optionally compares it with a benchmark for AgGrid table.
 
     Parameters:
     - stock: A pandas DataFrame containing the daily returns for the stock.
-    - spy_data: A pandas DataFrame containing the daily returns for SPY (optional).
+    - symbol: The symbol of the stock.
+    - benchmark_symbol: The symbol of the benchmark (optional).
+    - benchmark: A pandas DataFrame containing the daily returns for the benchmark (optional).
     """
     
     # Convert the stock data to a DataFrame and reset the index
     df = pd.DataFrame(stock).reset_index()
 
     # Rename the columns
-    df.columns = ['Date', 'Daily Returns']
+    df.columns = ['Date', symbol]
     # Format the 'Date' column to 'mm/dd/yyyy'
     df['Date'] = df['Date'].dt.strftime('%m/%d/%Y')
 
-    # Round 'Daily Returns' to 2 decimal places
-    df['Daily Returns'] = df['Daily Returns'].round(2)
+    # Round 'Daily Returns' to 2 decimal places and convert to percentage
+    df[symbol] = (df[symbol] * 100).round(2)
 
-    # If spy_data is provided, add it to the DataFrame and round it
-    if spy_data is not None:
-        df['SPY'] = spy_data.round(2)
+    # If benchmark is provided, prepare it separately and then merge it with the main DataFrame
+    if benchmark is not None:
+        benchmark_df = pd.DataFrame(benchmark).reset_index()
+        benchmark_df.columns = ['Date', benchmark_symbol]
+        benchmark_df['Date'] = benchmark_df['Date'].dt.strftime('%m/%d/%Y')
+        benchmark_df[benchmark_symbol] = (benchmark_df[benchmark_symbol] * 100)
+        df = df.merge(benchmark_df, on='Date', how='outer')
 
     return df
 
@@ -616,88 +732,245 @@ def table_drawdowns_periods(stock):
     return df
     
 
-
-def table_earnings(stock):
-    # Convert returns to growth of $1 investment over time
+def table_earnings(stock, symbol, benchmark_symbol=None, benchmark=None):
     earnings_data = (1 + stock).cumprod()
-
-    # Convert the series to a DataFrame and reset the index to get 'Date' as a column
     earnings_df = earnings_data.reset_index()
-    earnings_df.columns = ['Date', 'Value of $1']
-
-    # Format 'Date' to mm/dd/yyyy and remove time
+    earnings_df.columns = ['Date', symbol]
     earnings_df['Date'] = earnings_df['Date'].dt.strftime('%m/%d/%Y')
+    earnings_df[symbol] = earnings_df[symbol].round(2)
 
-    # Round 'Value of $1' to 2 decimal places
-    earnings_df['Value of $1'] = earnings_df['Value of $1'].round(2)
+    if benchmark is not None:
+        benchmark_earnings_data = (1 + benchmark).cumprod()
+        benchmark_earnings_df = benchmark_earnings_data.reset_index()
+        benchmark_earnings_df.columns = ['Date', benchmark_symbol]
+        benchmark_earnings_df['Date'] = benchmark_earnings_df['Date'].dt.strftime('%m/%d/%Y')
+        benchmark_earnings_df[benchmark_symbol] = benchmark_earnings_df[benchmark_symbol].round(2)
 
-    # Display the earnings as an ag-Grid table
+        earnings_df = earnings_df.merge(benchmark_earnings_df, on='Date', how='outer')
 
     return earnings_df
 
+def table_monthly_earnings(stock, symbol, benchmark_symbol=None, benchmark=None):
+    earnings_data = (1 + stock.resample('M').apply(lambda x: (1 + x).prod() - 1)).cumprod()
+    earnings_df = earnings_data.reset_index()
+    earnings_df.columns = ['Date', symbol]
+    earnings_df['Date'] = earnings_df['Date'].dt.strftime('%m/%d/%Y')
+    earnings_df[symbol] = earnings_df[symbol].round(2)
 
-def table_returns(stock):
+    if benchmark is not None:
+        benchmark_earnings_data = (1 + benchmark.resample('M').apply(lambda x: (1 + x).prod() - 1)).cumprod()
+        benchmark_earnings_df = benchmark_earnings_data.reset_index()
+        benchmark_earnings_df.columns = ['Date', benchmark_symbol]
+        benchmark_earnings_df['Date'] = benchmark_earnings_df['Date'].dt.strftime('%m/%d/%Y')
+        benchmark_earnings_df[benchmark_symbol] = benchmark_earnings_df[benchmark_symbol].round(2)
+
+        earnings_df = earnings_df.merge(benchmark_earnings_df, on='Date', how='outer')
+
+    return earnings_df
+
+def table_yearly_earnings(stock, symbol, benchmark_symbol=None, benchmark=None):
+    earnings_data = (1 + stock.resample('Y').apply(lambda x: (1 + x).prod() - 1)).cumprod()
+    earnings_df = earnings_data.reset_index()
+    earnings_df.columns = ['Date', symbol]
+    earnings_df['Date'] = earnings_df['Date'].dt.strftime('%m/%d/%Y')
+    earnings_df[symbol] = earnings_df[symbol].round(2)
+
+    if benchmark is not None:
+        benchmark_earnings_data = (1 + benchmark.resample('Y').apply(lambda x: (1 + x).prod() - 1)).cumprod()
+        benchmark_earnings_df = benchmark_earnings_data.reset_index()
+        benchmark_earnings_df.columns = ['Date', benchmark_symbol]
+        benchmark_earnings_df['Date'] = benchmark_earnings_df['Date'].dt.strftime('%m/%d/%Y')
+        benchmark_earnings_df[benchmark_symbol] = benchmark_earnings_df[benchmark_symbol].round(2)
+
+        earnings_df = earnings_df.merge(benchmark_earnings_df, on='Date', how='outer')
+
+    return earnings_df
+
+def table_returns(stock, symbol, benchmark_symbol=None, benchmark=None):
     stock_monthly = stock.resample('M').apply(lambda x: (1 + x).prod() - 1)
     stock_monthly_df = stock_monthly.reset_index()
-    stock_monthly_df.columns = ['Date', 'Monthly Returns']
-
-    # Round the returns to 2 decimal places
-    stock_monthly_df['Monthly Returns'] = stock_monthly_df['Monthly Returns'].round(2)
-
-    # Format the date to mm/dd/yyyy without any time
+    stock_monthly_df.columns = ['Date', symbol]
+    stock_monthly_df[symbol] = (stock_monthly_df[symbol] * 100).round(2)
     stock_monthly_df['Date'] = stock_monthly_df['Date'].dt.strftime('%m/%d/%Y')
+
+    if benchmark is not None:
+        benchmark_monthly = benchmark.resample('M').apply(lambda x: (1 + x).prod() - 1)
+        benchmark_monthly_df = benchmark_monthly.reset_index()
+        benchmark_monthly_df.columns = ['Date', benchmark_symbol]
+        benchmark_monthly_df[benchmark_symbol] = (benchmark_monthly_df[benchmark_symbol] * 100).round(2)
+        benchmark_monthly_df['Date'] = benchmark_monthly_df['Date'].dt.strftime('%m/%d/%Y')
+
+        stock_monthly_df = stock_monthly_df.merge(benchmark_monthly_df, on='Date', how='outer')
 
     return stock_monthly_df
 
-def table_rolling_sharpe(stock):
+def table_rolling_sharpe(stock, symbol, benchmark_symbol=None, benchmark=None):
     rolling_sharpe = qs.stats.rolling_sharpe(stock)
     rolling_sharpe.dropna(inplace=True)
     rolling_sharpe_df = rolling_sharpe.reset_index()
-    rolling_sharpe_df.columns = ['Date', 'Rolling Sharpe Ratio']
-
-    # Round the returns to 2 decimal places
-    rolling_sharpe_df['Rolling Sharpe Ratio'] = rolling_sharpe_df['Rolling Sharpe Ratio'].round(2)
-
-    # Format the date to mm/dd/yyyy without any time
+    rolling_sharpe_df.columns = ['Date', symbol]
+    rolling_sharpe_df[symbol] = rolling_sharpe_df[symbol].round(2)
     rolling_sharpe_df['Date'] = rolling_sharpe_df['Date'].dt.strftime('%m/%d/%Y')
+
+    if benchmark is not None:
+        benchmark_rolling_sharpe = qs.stats.rolling_sharpe(benchmark)
+        benchmark_rolling_sharpe.dropna(inplace=True)
+        benchmark_rolling_sharpe_df = benchmark_rolling_sharpe.reset_index()
+        benchmark_rolling_sharpe_df.columns = ['Date', benchmark_symbol]
+        benchmark_rolling_sharpe_df[benchmark_symbol] = benchmark_rolling_sharpe_df[benchmark_symbol].round(2)
+        benchmark_rolling_sharpe_df['Date'] = benchmark_rolling_sharpe_df['Date'].dt.strftime('%m/%d/%Y')
+
+        rolling_sharpe_df = rolling_sharpe_df.merge(benchmark_rolling_sharpe_df, on='Date', how='outer')
 
     return rolling_sharpe_df
 
-def table_rolling_sortino(stock):
+def table_rolling_sortino(stock, symbol, benchmark_symbol=None, benchmark=None):
     rolling_sortino = qs.stats.rolling_sortino(stock)
     rolling_sortino.dropna(inplace=True)
     rolling_sortino_df = rolling_sortino.reset_index()
-    rolling_sortino_df.columns = ['Date', 'Rolling Sortino Ratio']
-
-    # Round the ratio to 2 decimal places
-    rolling_sortino_df['Rolling Sortino Ratio'] = rolling_sortino_df['Rolling Sortino Ratio'].round(2)
-
-    # Format the date to mm/dd/yyyy without any time
+    rolling_sortino_df.columns = ['Date', symbol]
+    rolling_sortino_df[symbol] = rolling_sortino_df[symbol].round(2)
     rolling_sortino_df['Date'] = rolling_sortino_df['Date'].dt.strftime('%m/%d/%Y')
+
+    if benchmark is not None:
+        benchmark_rolling_sortino = qs.stats.rolling_sortino(benchmark)
+        benchmark_rolling_sortino.dropna(inplace=True)
+        benchmark_rolling_sortino_df = benchmark_rolling_sortino.reset_index()
+        benchmark_rolling_sortino_df.columns = ['Date', benchmark_symbol]
+        benchmark_rolling_sortino_df[benchmark_symbol] = benchmark_rolling_sortino_df[benchmark_symbol].round(2)
+        benchmark_rolling_sortino_df['Date'] = benchmark_rolling_sortino_df['Date'].dt.strftime('%m/%d/%Y')
+
+        rolling_sortino_df = rolling_sortino_df.merge(benchmark_rolling_sortino_df, on='Date', how='outer')
+
     return rolling_sortino_df
 
-def table_rolling_volatility(stock):
+def table_rolling_volatility(stock, symbol, benchmark_symbol=None, benchmark=None):
     rolling_volatility = qs.stats.rolling_volatility(stock)
     rolling_volatility.dropna(inplace=True)
     rolling_volatility_df = rolling_volatility.reset_index()
-    rolling_volatility_df.columns = ['Date', 'Rolling Volatility']
-
-    # Round the volatility to 2 decimal places
-    rolling_volatility_df['Rolling Volatility'] = rolling_volatility_df['Rolling Volatility'].round(2)
-
-    # Format the date to mm/dd/yyyy without any time
+    rolling_volatility_df.columns = ['Date', symbol]
+    rolling_volatility_df[symbol] = rolling_volatility_df[symbol].round(2)
     rolling_volatility_df['Date'] = rolling_volatility_df['Date'].dt.strftime('%m/%d/%Y')
+
+    if benchmark is not None:
+        benchmark_rolling_volatility = qs.stats.rolling_volatility(benchmark)
+        benchmark_rolling_volatility.dropna(inplace=True)
+        benchmark_rolling_volatility_df = benchmark_rolling_volatility.reset_index()
+        benchmark_rolling_volatility_df.columns = ['Date', benchmark_symbol]
+        benchmark_rolling_volatility_df[benchmark_symbol] = benchmark_rolling_volatility_df[benchmark_symbol].round(2)
+        benchmark_rolling_volatility_df['Date'] = benchmark_rolling_volatility_df['Date'].dt.strftime('%m/%d/%Y')
+
+        rolling_volatility_df = rolling_volatility_df.merge(benchmark_rolling_volatility_df, on='Date', how='outer')
+
     return rolling_volatility_df
 
-def table_yearly_returns(stock):
+def table_yearly_returns(stock, symbol, benchmark_symbol=None, benchmark=None):
     stock_yearly = stock.resample('Y').apply(lambda x: (1 + x).prod() - 1)
     stock_yearly_df = stock_yearly.reset_index()
-    stock_yearly_df.columns = ['Date', 'Yearly Returns']
-
-    # Round the returns to 2 decimal places
-    stock_yearly_df['Yearly Returns'] = stock_yearly_df['Yearly Returns'].round(2)
-
-    # Extract the year from the date
+    stock_yearly_df.columns = ['Date', symbol]
+    stock_yearly_df[symbol] = (stock_yearly_df[symbol] * 100).round(2)
     stock_yearly_df['Date'] = stock_yearly_df['Date'].dt.year
 
+    if benchmark is not None:
+        benchmark_yearly = benchmark.resample('Y').apply(lambda x: (1 + x).prod() - 1)
+        benchmark_yearly_df = benchmark_yearly.reset_index()
+        benchmark_yearly_df.columns = ['Date', benchmark_symbol]
+        benchmark_yearly_df[benchmark_symbol] = (benchmark_yearly_df[benchmark_symbol] * 100).round(2)
+        benchmark_yearly_df['Date'] = benchmark_yearly_df['Date'].dt.year
+
+        stock_yearly_df = stock_yearly_df.merge(benchmark_yearly_df, on='Date', how='outer')
+
     return stock_yearly_df
+
+def key_metrics(stock, symbol, benchmark_symbol, benchmark=None):
+    # Calculate additional metrics
+    stock = stock.dropna()
+    returns = qs.utils.to_returns(stock)
+    returns = qs.utils._prepare_returns(returns)
+
+    metrics = {
+            'Cumulative Return': qs.stats.comp(returns) * 100,
+            'CAGR': qs.stats.cagr(returns) * 100,
+            'Sharpe': qs.stats.sharpe(returns),
+            'Prob. Sharpe Ratio': qs.stats.probabilistic_sharpe_ratio(returns),
+            'Smart Sharpe': qs.stats.smart_sharpe(returns),
+            'Sortino': qs.stats.sortino(returns),
+            'Smart Sortino': qs.stats.smart_sortino(returns),
+            'Sortino/√2': qs.stats.sortino(returns) / np.sqrt(2),
+            'Smart Sortino/√2': qs.stats.smart_sortino(returns) / np.sqrt(2),
+            'Max Drawdown': qs.stats.max_drawdown(returns) * 100,
+            'Volatility (ann.)': qs.stats.volatility(returns) * 100,
+            'Calmar': qs.stats.calmar(returns),
+            'Skew': qs.stats.skew(returns),
+            'Kurtosis': qs.stats.kurtosis(returns),
+            'Expected Daily': qs.stats.expected_return(returns, aggregate='D') * 100,
+            'Expected Monthly': qs.stats.expected_return(returns, aggregate='M') * 100,
+            'Expected Yearly': qs.stats.expected_return(returns, aggregate='A') * 100,
+            'Best Day': qs.stats.best(returns, 'D') * 100,
+            'Worst Day': qs.stats.worst(returns, 'D') * 100,
+            'Best Month': qs.stats.best(returns, 'M') * 100,
+            'Worst Month': qs.stats.worst(returns, 'M') * 100,
+            'Recovery Factor': qs.stats.recovery_factor(returns),
+            'Ulcer Index': qs.stats.ulcer_index(returns),
+    }
+
+    # Convert to DataFrame and round to 2 decimals
+    metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Stock']).round(2)
+
+    # Append '%' symbol to the selected metrics
+    percentage_metrics = ['CAGR', 'Max Drawdown', 'Volatility (ann.)', 'Expected Daily', 'Expected Monthly', 'Expected Yearly', 'Cumulative Return', 'Best Day', 'Worst Day', 'Best Month', 'Worst Month']
+    for metric in percentage_metrics:
+        metrics_df.loc[metric, 'Stock'] = str(metrics_df.loc[metric, 'Stock']) + '%'
+
+    # Repeat the same process for the benchmark if it exists
+    if benchmark is not None:
+        benchmark = benchmark.dropna()
+        benchmark_returns = qs.utils._prepare_returns(benchmark)
+
+        benchmark_metrics = {
+            'CAGR': qs.stats.cagr(benchmark_returns) * 100,
+            'Sharpe': qs.stats.sharpe(benchmark_returns),
+            'Sortino': qs.stats.sortino(benchmark_returns),
+            'Max Drawdown': qs.stats.max_drawdown(benchmark_returns) * 100,
+            'Volatility (ann.)': qs.stats.volatility(benchmark_returns) * 100,
+            'Calmar': qs.stats.calmar(benchmark_returns),
+            'Expected Daily': qs.stats.expected_return(benchmark_returns, aggregate='D') * 100,
+            'Expected Monthly': qs.stats.expected_return(benchmark_returns, aggregate='M') * 100,
+            'Expected Yearly': qs.stats.expected_return(benchmark_returns, aggregate='A') * 100,
+            'Cumulative Return': qs.stats.comp(benchmark_returns) * 100,
+            'Prob. Sharpe Ratio': qs.stats.probabilistic_sharpe_ratio(benchmark_returns),
+            'Smart Sharpe': qs.stats.smart_sharpe(benchmark_returns),
+            'Smart Sortino': qs.stats.smart_sortino(benchmark_returns),
+            'Sortino/√2': qs.stats.sortino(benchmark_returns) / np.sqrt(2),
+            'Smart Sortino/√2': qs.stats.smart_sortino(benchmark_returns) / np.sqrt(2),
+            'Skew': qs.stats.skew(benchmark_returns),
+            'Kurtosis': qs.stats.kurtosis(benchmark_returns),
+            'Daily Value-at-Risk': qs.stats.value_at_risk(benchmark_returns),
+            'Expected Shortfall (cVaR)': qs.stats.cvar(benchmark_returns),
+            'Gain/Pain Ratio': qs.stats.gain_to_pain_ratio(benchmark_returns),
+            'Tail Ratio': qs.stats.tail_ratio(benchmark_returns),
+            'Best Day': qs.stats.best(benchmark_returns, 'D') * 100,
+            'Worst Day': qs.stats.worst(benchmark_returns, 'D') * 100,
+            'Best Month': qs.stats.best(benchmark_returns, 'M') * 100,
+            'Worst Month': qs.stats.worst(benchmark_returns, 'M') * 100,
+            'Recovery Factor': qs.stats.recovery_factor(benchmark_returns),
+            'Ulcer Index': qs.stats.ulcer_index(benchmark_returns),
+        }
+
+        metrics.update(benchmark_metrics)
+
+        # Convert to DataFrame and round to 2 decimals
+        benchmark_metrics_df = pd.DataFrame.from_dict(benchmark_metrics, orient='index', columns=['Benchmark']).round(2)
+
+        # Append '%' symbol to the selected metrics
+        for metric in percentage_metrics:
+            benchmark_metrics_df.loc[metric, 'Benchmark'] = str(benchmark_metrics_df.loc[metric, 'Benchmark']) + '%'
+
+        # Join the two dataframes
+        metrics_df = metrics_df.reset_index().merge(benchmark_metrics_df.reset_index(), left_on='index', right_on='index', how='outer')
+        metrics_df.columns = ['Metric', symbol, benchmark_symbol]
+    else:
+        metrics_df.reset_index(inplace=True)
+        metrics_df.columns = ['Metric', symbol]
+
+    return metrics_df
