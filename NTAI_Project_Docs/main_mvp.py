@@ -21,6 +21,14 @@ if st.session_state['page'] == 'Home':
     st.title("Welcome to MarketMomentum!")
     st.text("To get started, enter a stock symbol and generate your own custom report or see a key metrics snapshot")
 
+elif st.session_state['page'] == 'Snapshot':
+    st.title("Snapshot")
+    # Rest of the code for Snapshot page
+
+elif st.session_state['page'] == 'Custom Report':
+    st.title("Custom Report")
+    # Rest of the code for Custom Report page
+
 # create a text input for the stock symbol in the sidebar
 symbol = st.sidebar.text_input("Enter a stock symbol", "MSFT")
 
@@ -74,10 +82,8 @@ if benchmark_symbol:
         benchmark = benchmark.loc[start_str:end_str]
 
 stock = st.session_state['stock']
-
 # Filter the returns for the selected date range
 stock = stock.loc[start_str:end_str]
-
 # Reconstruct the price data from the returns
 price = (1 + stock).cumprod()
 
@@ -85,12 +91,8 @@ if st.session_state['page'] == 'Custom Report':
     # Define the options for the multi-select dropdown menu
     options = ['Metrics Table', 'Daily Returns Graph', 'Daily Returns Table (%)', 'Daily Returns Distribution Graph', 'Drawdown Graph', 'Drawdowns Periods Graph', 'Drawdowns Periods Table', 'Earnings Graph', 'Daily Earnings Table (%)', 'Monthly Earnings Table (%)','Yearly Earnings Table (%)','Monthly Distribution Graph',  'Log Returns Graph', 'Monthly Heatmap Graph', 'Monthly Returns Graph', 'Monthly Returns Table (%)', 'Rolling Sharpe Graph', 'Rolling Sharpe Table', 'Rolling Sortino Graph', 'Rolling Sortino Table', 'Rolling Volatility Graph', 'Rolling Volatility Table', 'Yearly Returns Graph', 'Yearly Returns Table (%)']
     selected_options = st.sidebar.multiselect('Select the graphs and tables you want to display:', options)
-
-    generate_report_button = st.sidebar.button('Generate Report')
-
-    if generate_report_button:
     # Modify the function mappings to pass the benchmark to the functions
-        graph_functions = {
+    graph_functions = {
                 'Daily Returns Graph': lambda stock: qsf.plot_daily_returns(stock, symbol, benchmark, benchmark_symbol),
                 'Daily Returns Distribution Graph': lambda stock: qsf.plot_distribution(stock, symbol, benchmark, benchmark_symbol),
                 'Drawdown Graph': qsf.plot_drawdown,
@@ -106,7 +108,7 @@ if st.session_state['page'] == 'Custom Report':
                 'Yearly Returns Graph': lambda stock: qsf.plot_yearly_returns(stock, symbol, benchmark, benchmark_symbol)
             }
 
-        table_functions = {
+    table_functions = {
                 'Daily Returns Table (%)': lambda stock: qsf.table_daily_returns(stock, symbol, benchmark_symbol, benchmark),
                 'Drawdowns Periods Table': qsf.table_drawdowns_periods,
                 'Daily Earnings Table (%)': lambda stock: qsf.table_earnings(stock, symbol, benchmark_symbol, benchmark),
@@ -121,16 +123,14 @@ if st.session_state['page'] == 'Custom Report':
             }
 
         # Initialize a list to keep track of which column is free
-        columns = []
-        free_column_index = 0
-
+    columns = []
+    free_column_index = 0
         # Initialize a dictionary to store tables
-        tables = {}
-
+    tables = {}
         # Initialize a dictionary to store graphs
-        graphs = {}
+    graphs = {}
 
-        for option in selected_options:
+    for option in selected_options:
             # If the option is 'Monthly Heatmap Graph', display it in a full-width container
             if option == 'Monthly Heatmap Graph':
                 fig = graph_functions[option](stock)
@@ -161,7 +161,7 @@ if st.session_state['page'] == 'Custom Report':
 
                     gridOptions={
                         'columnDefs': column_defs,
-                        'defaultColDef': {'flex': 1},
+                        'defaultColDef': {'flex': 1, 'editable': False},
                         'fit_columns_on_grid_load': True,
                     }
                     with columns[free_column_index].container():
@@ -175,7 +175,7 @@ if st.session_state['page'] == 'Custom Report':
             free_column_index = (free_column_index + 1) % 2
 
         # Add the export button
-        if len(tables) > 0 or len(graphs) > 0:
+    if len(tables) > 0 or len(graphs) > 0:
             qsf.export_data(graphs, tables, symbol)
         
 elif st.session_state['page'] == 'Snapshot':
