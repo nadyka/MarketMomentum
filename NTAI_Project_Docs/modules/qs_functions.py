@@ -912,13 +912,26 @@ def key_metrics(stock, symbol, benchmark_symbol, benchmark=None):
             'Worst Month': qs.stats.worst(returns, 'M') * 100,
             'Recovery Factor': qs.stats.recovery_factor(returns),
             'Ulcer Index': qs.stats.ulcer_index(returns),
+            'Worst Year': qs.stats.worst(returns, 'A') * 100,
+            'Best Year': qs.stats.best(returns, 'A') * 100,
+            'Recovery Factor': qs.stats.recovery_factor(returns),
+            'Payoff Ratio': qs.stats.payoff_ratio(returns),
+            'Profit Factor': qs.stats.profit_factor(returns),
+            'Common Sense Ratio': qs.stats.common_sense_ratio(returns),
+            'CPC Index': qs.stats.cpc_index(returns),
+            'Prob. Sharpe Ratio': qs.stats.probabilistic_sharpe_ratio(returns)*100,
+            'Risk of Ruin': qs.stats.risk_of_ruin(returns)*100,
+            'Daily Value-at-Risk': qs.stats.value_at_risk(returns),
+            'Gain/Pain Ratio': qs.stats.gain_to_pain_ratio(returns),
+            'Tail Ratio': qs.stats.tail_ratio(returns),
+            
     }
 
     # Convert to DataFrame and round to 2 decimals
     metrics_df = pd.DataFrame.from_dict(metrics, orient='index', columns=['Stock']).round(2)
 
     # Append '%' symbol to the selected metrics
-    percentage_metrics = ['CAGR', 'Max Drawdown', 'Volatility (ann.)', 'Expected Daily', 'Expected Monthly', 'Expected Yearly', 'Cumulative Return', 'Best Day', 'Worst Day', 'Best Month', 'Worst Month']
+    percentage_metrics = ['CAGR', 'Max Drawdown', 'Volatility (ann.)', 'Expected Daily', 'Expected Monthly', 'Expected Yearly', 'Cumulative Return', 'Best Day', 'Worst Day', 'Best Month', 'Worst Month', 'Best Year', 'Worst Year','Prob. Sharpe Ratio','Risk of Ruin']
     for metric in percentage_metrics:
         metrics_df.loc[metric, 'Stock'] = str(metrics_df.loc[metric, 'Stock']) + '%'
 
@@ -938,7 +951,7 @@ def key_metrics(stock, symbol, benchmark_symbol, benchmark=None):
             'Expected Monthly': qs.stats.expected_return(benchmark_returns, aggregate='M') * 100,
             'Expected Yearly': qs.stats.expected_return(benchmark_returns, aggregate='A') * 100,
             'Cumulative Return': qs.stats.comp(benchmark_returns) * 100,
-            'Prob. Sharpe Ratio': qs.stats.probabilistic_sharpe_ratio(benchmark_returns),
+            'Prob. Sharpe Ratio': qs.stats.probabilistic_sharpe_ratio(benchmark_returns)*100,
             'Smart Sharpe': qs.stats.smart_sharpe(benchmark_returns),
             'Smart Sortino': qs.stats.smart_sortino(benchmark_returns),
             'Sortino/√2': qs.stats.sortino(benchmark_returns) / np.sqrt(2),
@@ -946,7 +959,6 @@ def key_metrics(stock, symbol, benchmark_symbol, benchmark=None):
             'Skew': qs.stats.skew(benchmark_returns),
             'Kurtosis': qs.stats.kurtosis(benchmark_returns),
             'Daily Value-at-Risk': qs.stats.value_at_risk(benchmark_returns),
-            'Expected Shortfall (cVaR)': qs.stats.cvar(benchmark_returns),
             'Gain/Pain Ratio': qs.stats.gain_to_pain_ratio(benchmark_returns),
             'Tail Ratio': qs.stats.tail_ratio(benchmark_returns),
             'Best Day': qs.stats.best(benchmark_returns, 'D') * 100,
@@ -955,6 +967,14 @@ def key_metrics(stock, symbol, benchmark_symbol, benchmark=None):
             'Worst Month': qs.stats.worst(benchmark_returns, 'M') * 100,
             'Recovery Factor': qs.stats.recovery_factor(benchmark_returns),
             'Ulcer Index': qs.stats.ulcer_index(benchmark_returns),
+            'Worst Year': qs.stats.worst(benchmark_returns, 'A') * 100,
+            'Best Year': qs.stats.best(benchmark_returns, 'A') * 100,
+            'Recovery Factor': qs.stats.recovery_factor(benchmark_returns),
+            'Payoff Ratio': qs.stats.payoff_ratio(benchmark_returns),
+            'Profit Factor': qs.stats.profit_factor(benchmark_returns),
+            'CPC Index': qs.stats.cpc_index(benchmark_returns),
+            'Risk of Ruin': qs.stats.risk_of_ruin(benchmark_returns),
+            'Common Sense Ratio': qs.stats.common_sense_ratio(benchmark_returns),
         }
 
         metrics.update(benchmark_metrics)
