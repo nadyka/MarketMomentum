@@ -7,7 +7,6 @@ import time
 from st_aggrid import AgGrid
 from datetime import timedelta
 
-
 # extend pandas functionality with metrics, etc.
 qs.extend_pandas()
 
@@ -67,25 +66,47 @@ if st.sidebar.button('Custom Report'):
 start_str = start_date.strftime('%Y-%m-%d')
 end_str = end_date.strftime('%Y-%m-%d')
 
-time.sleep(.5)
+try:
+    # fetch the daily returns for a stock
+    if 'stock' not in st.session_state or 'symbol' not in st.session_state or st.session_state['symbol'] != symbol:
+        st.session_state['stock'] = qs.utils.download_returns(symbol)
+        if st.session_state['stock'].empty:
+            st.error(f"Ticker {symbol} does not exist.")
+            st.stop()
+        st.session_state['symbol'] = symbol
 
-# fetch the daily returns for a stock
-if 'stock' not in st.session_state or 'symbol' not in st.session_state or st.session_state['symbol'] != symbol:
-    st.session_state['stock'] = qs.utils.download_returns(symbol)
-    st.session_state['symbol'] = symbol
-
-time.sleep(.5)
+    time.sleep(.5)
     # If a benchmark symbol is provided, download the returns for the benchmark
-if benchmark_symbol:
+    if benchmark_symbol:
         benchmark = qs.utils.download_returns(benchmark_symbol)
+        if benchmark.empty:
+            st.error(f"Benchmark ticker {benchmark_symbol} does not exist.")
+            st.stop()
+
         # Filter the benchmark for the selected date range
         benchmark = benchmark.loc[start_str:end_str]
 
-stock = st.session_state['stock']
-# Filter the returns for the selected date range
-stock = stock.loc[start_str:end_str]
-# Reconstruct the price data from the returns
-price = (1 + stock).cumprod()
+        # Check if the benchmark DataFrame is empty
+        if benchmark.empty:
+            st.error(f"No data for benchmark {benchmark_symbol} in the specified date range.")
+            st.stop()
+
+    stock = st.session_state['stock']
+    # Filter the returns for the selected date range
+    stock = stock.loc[start_str:end_str]
+    # Reconstruct the price data from the returns
+    price = (1 + stock).cumprod()
+
+    # Check if the returns DataFrame is empty
+    if stock.empty:
+        st.error(f"No data for stock {symbol} in the specified date range.")
+        st.stop()
+except IndexError as e:
+    st.error(f"An IndexError occurred: {e}")
+    st.stop()
+except Exception as e:
+    st.error(f"An error occurred: {e}")
+    st.stop()
 
 if st.session_state['page'] == 'Custom Report':
     # Define the options for the multi-select dropdown menu
