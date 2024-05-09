@@ -3,6 +3,7 @@ import quantstats as qs
 import plotly.graph_objects as go
 from scipy.stats import norm
 import pandas as pd
+import streamlit as st
 
 def max_consecutive(returns, win=True):
     # Convert returns to binary win/loss
@@ -19,6 +20,61 @@ def max_consecutive(returns, win=True):
 
     return streak_lengths
 
+def export_data(graphs, tables, symbol):
+    # Convert all tables and graphs to HTML and join them
+    graphs_html = ''.join([f'<div class="graph">{graph}</div>' for graph in graphs.values()])
+    tables_html = ''.join([f'<div class="table"><h2>{name}</h2>{df.to_html(border=0, index=False)}</div>' for name, df in tables.items()])
+    html = f'<h1>{symbol} Custom Report</h1><div class="container"><div class="graphs">{graphs_html}</div><div class="tables">{tables_html}</div></div>'
+
+    # Add CSS to style the tables and graphs
+    css = """
+    <style>
+    .container {
+        display: flex;
+        align-items: flex-start;
+    }
+    .graphs {
+        width: 66.66%;
+    }
+    .tables {
+        width: 33.33%;
+    }
+    .table table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    .table table td, .table table th {
+        border: none;
+        padding: 10px;
+        text-align: left;
+    }
+    .table table th {
+        white-space: nowrap;
+    }
+    </style>
+    """
+
+    # Add the CSS to the HTML
+    html = css + html
+
+    # Create a download button for the HTML file
+    st.sidebar.download_button(
+        "Export all to HTML",
+        data=html,
+        file_name='tables_and_graphs.html',
+        mime='text/html'
+    )
+    
+    # Convert all tables to CSV and join them
+    csv = '\n\n'.join([df.to_csv() for df in tables.values()])
+
+    # Create a download button for the CSV file
+    st.sidebar.download_button(
+        "Export tables to CSV",
+        data=csv,
+        file_name='tables.csv',
+        mime='text/csv'
+    )
 
 ############GRAPHS################
 
