@@ -678,7 +678,7 @@ def table_daily_returns(stock, symbol, benchmark_symbol=None, benchmark=None):
         benchmark_df = pd.DataFrame(benchmark).reset_index()
         benchmark_df.columns = ['Date', benchmark_symbol]
         benchmark_df['Date'] = benchmark_df['Date'].dt.strftime('%m/%d/%Y')
-        benchmark_df[benchmark_symbol] = (benchmark_df[benchmark_symbol] * 100)
+        benchmark_df[benchmark_symbol] = (benchmark_df[benchmark_symbol] * 100).round(2)
         df = df.merge(benchmark_df, on='Date', how='outer')
 
     return df
