@@ -1,6 +1,7 @@
 # MarketMomentum
 
-MarketMomentum is a financial analysis tool built with Python and Streamlit. It allows users to analyze the performance of stocks over a specified date range, compare them to a benchmark, and generate custom reports with various metrics and visualizations.
+MarketMomentum is a financial analysis tool built with Python and Streamlit. It allows users to analyze the performance of stocks over a specified date range, compare them to a benchmark, and generate custom reports with various metrics and visualizations. Based on formulas from the popular Quantstats repository which can be found here: https://github.com/ranaroussi/quantstats
+
 
 ## Features
 
