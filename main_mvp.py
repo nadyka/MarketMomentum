@@ -201,10 +201,10 @@ if st.session_state['page'] == 'Custom Report':
         
 elif st.session_state['page'] == 'Snapshot':
     # Save the output of qs.reports.html(stock) to a file
-    qs.reports.html(stock, benchmark=benchmark, output="NTAI_Project_Docs/quantstats-tearsheet.html")
+    qs.reports.html(stock, benchmark=benchmark, output="snapshot.html")
 
     # Read the HTML file
-    with open("NTAI_Project_Docs/quantstats-tearsheet.html", 'r', encoding='utf-8') as f:
+    with open("snapshot.html", 'r', encoding='utf-8') as f:
         html_string = f.read()
 
     # Display the HTML string in the Streamlit app
