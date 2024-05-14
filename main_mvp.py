@@ -209,3 +209,11 @@ elif st.session_state['page'] == 'Snapshot':
 
     # Display the HTML string in the Streamlit app
     components.html(html_string, width=1080, height=4000, scrolling=True)
+
+        # Add an export button for the snapshot
+    st.sidebar.download_button(
+        label="Export Snapshot",
+        data=html_string,
+        file_name="snapshot.html",
+        mime="text/html"
+    )
