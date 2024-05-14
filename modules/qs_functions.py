@@ -61,7 +61,7 @@ def export_data(graphs, tables, symbol):
     st.sidebar.download_button(
         "Export all to HTML",
         data=html,
-        file_name='tables_and_graphs.html',
+        file_name=f'{symbol} tables_and_graphs.html',
         mime='text/html'
     )
     
@@ -72,7 +72,7 @@ def export_data(graphs, tables, symbol):
     st.sidebar.download_button(
         "Export tables to CSV",
         data=csv,
-        file_name='tables.csv',
+        file_name=f'{symbol} tables.csv',
         mime='text/csv'
     )
 

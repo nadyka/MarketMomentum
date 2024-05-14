@@ -214,6 +214,6 @@ elif st.session_state['page'] == 'Snapshot':
     st.sidebar.download_button(
         label="Export Snapshot",
         data=html_string,
-        file_name="snapshot.html",
+        file_name=f"{symbol}_snapshot.html",
         mime="text/html"
     )
