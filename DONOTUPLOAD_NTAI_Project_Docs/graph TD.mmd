@@ -1,0 +1,16 @@
+graph TD
+    A[Start] --> B[Set Page Config]
+    B --> C[Initialize Session State]
+    C --> D[Create Sidebar Inputs]
+    D --> E[Fetch Stock Returns]
+    E --> F[Filter Stock Returns]
+    F --> G[Check Session State]
+    G -->|'Home'| H[Display Welcome Message]
+    G -->|'Snapshot'| I[Generate Snapshot]
+    G -->|'Custom Report'| J[Generate Custom Report]
+    I --> K[Display Snapshot]
+    J --> L[Display Custom Report]
+    K --> M[Export Snapshot in HTML or CSV format]
+    L --> N[Export Custom Report in HTML or CSV format]
+    M --> O[End]
+    N --> O

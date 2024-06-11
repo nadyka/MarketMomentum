@@ -1,0 +1,28 @@
+,Metric,Stock,Benchmark
+0,Best Day,0.03,0.02
+1,Best Month,0.06,0.05
+2,CAGR,0.19,0.18
+3,Calmar,2.06,3.34
+4,Cumulative Return,9.26,8.65
+5,Daily Value-at-Risk,-0.02,-0.01
+6,Expected Daily,0.1,0.09
+7,Expected Monthly,1.79,1.67
+8,Expected Shortfall (cVaR),-0.03,-0.01
+9,Expected Yearly,9.26,8.65
+10,Gain/Pain Ratio,0.24,0.39
+11,Kurtosis,-0.1,-0.15
+12,Max Drawdown,-0.09,-0.05
+13,Prob. Sharpe Ratio,0.78,0.89
+14,Recovery Factor,1.03,1.6
+15,Sharpe,1.34,2.05
+16,Skew,-0.29,-0.08
+17,Smart Sharpe,1.26,2.01
+18,Smart Sortino,1.85,3.16
+19,Smart Sortino/√2,1.31,2.23
+20,Sortino,1.97,3.22
+21,Sortino/√2,1.4,2.28
+22,Tail Ratio,0.95,0.98
+23,Ulcer Index,0.03,0.02
+24,Volatility (ann.),0.2,0.12
+25,Worst Day,-0.03,-0.02
+26,Worst Month,-0.07,-0.04
