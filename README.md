@@ -173,4 +173,8 @@ In preparation for V2, we have outlined a preliminary approach to fetching daily
 5. Displaying an error message and terminating execution upon encountering an `IndexError` at any stage of the process. The error message includes details about the `IndexError`.
 6. Handling other exceptions by presenting an error message detailing the occurrence and nature of the error, followed by stopping execution.
 
+<<<<<<< HEAD
 These enhancements aim to refine the application's functionality, ensuring robust error management and an improved user experience.
+=======
+These enhancements aim to refine the application's functionality, ensuring robust error management and an improved user experience.
+>>>>>>> a06fff5ddcbf9959eefbafbb22186b38c41329ad
